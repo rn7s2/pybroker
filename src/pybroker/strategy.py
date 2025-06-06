@@ -130,7 +130,7 @@ class BacktestMixin:
         train_only: bool = False,
         slippage_model: Optional[SlippageModel] = None,
         enable_fractional_shares: bool = False,
-        round_fill_price: bool = True,
+        round_fill_price: Union[bool, Callable[[str, float], float]] = True,
         warmup: Optional[int] = None,
     ) -> dict[str, pd.DataFrame]:
         r"""Backtests a ``set`` of :class:`.Execution`\ s that implement

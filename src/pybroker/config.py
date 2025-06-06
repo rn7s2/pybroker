@@ -86,7 +86,7 @@ class StrategyConfig:
     fee_amount: float = field(default=0)
     subtract_fees: bool = field(default=False)
     enable_fractional_shares: bool = field(default=False)
-    round_fill_price: bool = field(default=True)
+    round_fill_price: Union[bool, Callable[[str, float], float]] = field(default=True)
     position_mode: PositionMode = field(default=PositionMode.DEFAULT)
     max_long_positions: Optional[int] = field(default=None)
     max_short_positions: Optional[int] = field(default=None)

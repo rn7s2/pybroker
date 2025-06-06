@@ -512,7 +512,7 @@ class PriceScope:
         self,
         col_scope: ColumnScope,
         sym_end_index: Mapping[str, int],
-        round_fill_price: bool,
+        round_fill_price: Union[bool, Callable[[str, float], float]],
     ):
         self._col_scope = col_scope
         self._sym_end_index = sym_end_index
@@ -613,8 +613,11 @@ class PriceScope:
             fill_price = price(symbol, bar_data)
         else:
             raise ValueError(f"Unknown price: {price_type}")
-        if self._round_fill_price:
-            fill_price = round(fill_price, 2)
+        if self._round_fill_price is bool:
+            if self._round_fill_price:
+                fill_price = round(fill_price, 2)
+        else:
+            fill_price = self._round_fill_price(symbol, fill_price)
         return to_decimal(fill_price)
 
 
