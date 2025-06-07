@@ -2,7 +2,6 @@
 
 - Custom price rounding logic
 - `VolumeMultiple` support
-- Short positions also occupy cash
 
 ## 
 

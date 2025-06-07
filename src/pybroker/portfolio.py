@@ -709,7 +709,7 @@ class Portfolio:
         entry_amount = shares * self._amount_per_share(pos.symbol, entry.price)
         entry_pnl = entry_amount - order_amount
         self.pnl += entry_pnl
-        self.cash += order_amount
+        self.cash += entry_pnl
         pos.shares -= shares
         entry.shares -= shares
         pnl_per_bar = entry_pnl if not entry.bars else entry_pnl / entry.bars
@@ -940,19 +940,6 @@ class Portfolio:
             return Decimal()
         if self._position_mode == PositionMode.LONG_ONLY:
             return Decimal()
-        clamped_shares = self._clamp_shares(symbol, fill_price, shares)
-        if clamped_shares < shares:
-            self._logger.debug_sell_shares_exceed_cash(
-                date=date,
-                symbol=symbol,
-                shares=shares,
-                fill_price=fill_price,
-                cash=self.cash,
-                clamped_shares=clamped_shares,
-            )
-            shares = clamped_shares
-        order_amount = shares * self._amount_per_share(symbol, fill_price)
-        self.cash -= order_amount
         if symbol not in self.short_positions:
             self.symbols.add(symbol)
             pos = Position(symbol=symbol, shares=shares, type="short")
