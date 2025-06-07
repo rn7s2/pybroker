@@ -76,6 +76,7 @@ class BaseContext:
         self._models = models
         self._sym_end_index = sym_end_index
         self._pending_order_scope = pending_order_scope
+        self._volume_multiples = config.volume_multiples
 
     @property
     def total_equity(self) -> Decimal:
@@ -236,7 +237,11 @@ class BaseContext:
             raise ValueError(f"Unknown pos_type: {pos_type!r}.")
 
     def calc_target_shares(
-        self, target_size: float, price: float, cash: Optional[float] = None
+        self,
+        symbol: str,
+        target_size: float,
+        price: float,
+        cash: Optional[float] = None,
     ) -> Union[Decimal, int]:
         r"""Calculates the number of shares given a ``target_size`` allocation
         and share ``price``.
@@ -258,7 +263,9 @@ class BaseContext:
         shares = (
             (to_decimal(cash) if cash is not None else self._portfolio.equity)
             * to_decimal(target_size)
-            / to_decimal(price)
+            / to_decimal(
+                price * (1 if symbol not in self._volume_multiples else self._volume_multiples[symbol])
+            )
         )
         if self.config.enable_fractional_shares:
             return shares.max(0)
@@ -1007,7 +1014,7 @@ class ExecContext(BaseContext):
             ``True``, then a Decimal is returned.
         """
         price = self.close[-1] if price is None else price
-        return super().calc_target_shares(target_size, price, cash)
+        return super().calc_target_shares(self.symbol, target_size, price, cash)
 
     def cancel_pending_order(self, order_id: int) -> bool:
         """Cancels a :class:`pybroker.scope.PendingOrder` with ``order_id``."""
