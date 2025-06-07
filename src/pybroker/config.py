@@ -80,6 +80,7 @@ class StrategyConfig:
     """
 
     initial_cash: float = field(default=100_000)
+    margin_rates: dict[str, float] = field(default_factory=lambda: {})
     volume_multiples: dict[str, int] = field(default_factory=lambda: {})
     fee_mode: Optional[Union[FeeMode, Callable[[FeeInfo], Decimal]]] = field(
         default=None

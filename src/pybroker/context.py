@@ -76,7 +76,6 @@ class BaseContext:
         self._models = models
         self._sym_end_index = sym_end_index
         self._pending_order_scope = pending_order_scope
-        self._volume_multiples = config.volume_multiples
 
     @property
     def total_equity(self) -> Decimal:
@@ -264,7 +263,9 @@ class BaseContext:
             (to_decimal(cash) if cash is not None else self._portfolio.equity)
             * to_decimal(target_size)
             / to_decimal(
-                price * (1 if symbol not in self._volume_multiples else self._volume_multiples[symbol])
+                price
+                * (1 if symbol not in self.config.volume_multiples else self.config.volume_multiples[symbol])
+                * (1 if symbol not in self.config.margin_rates else self.config.margin_rates[symbol])
             )
         )
         if self.config.enable_fractional_shares:
