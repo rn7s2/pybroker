@@ -2,6 +2,7 @@
 
 - Custom price rounding logic
 - `VolumeMultiple` support
+- Consider margin when calculating target shares
 
 ## 
 
