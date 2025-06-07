@@ -1247,6 +1247,7 @@ class Strategy(
             if portfolio is None:
                 portfolio = Portfolio(
                     self._config.initial_cash,
+                    self._config.volume_multiples,
                     self._config.fee_mode,
                     self._config.fee_amount,
                     self._config.subtract_fees,

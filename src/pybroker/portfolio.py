@@ -305,6 +305,7 @@ def _calculate_pnl_mae_mfe(
     close: Decimal,
     low: Optional[Decimal],
     high: Optional[Decimal],
+    amount_per_share: Callable[[str, Decimal], Decimal],
 ):
     if pos.type != "long" and pos.type != "short":
         raise ValueError(f"Unknown position type: {pos.type}")
@@ -312,18 +313,19 @@ def _calculate_pnl_mae_mfe(
     for entry in pos.entries:
         loss = Decimal()
         profit = Decimal()
+        symbol = pos.symbol
         if pos.type == "long":
-            pnl += (close - entry.price) * entry.shares
+            pnl += (amount_per_share(symbol, close) - amount_per_share(symbol, entry.price)) * entry.shares
             if low is not None:
-                loss = low - entry.price
+                loss = amount_per_share(symbol, low - entry.price)
             if high is not None:
-                profit = high - entry.price
+                profit = amount_per_share(symbol, high - entry.price)
         elif pos.type == "short":
-            pnl += (entry.price - close) * entry.shares
+            pnl += (amount_per_share(symbol, entry.price) - amount_per_share(symbol, close)) * entry.shares
             if high is not None:
-                loss = entry.price - high
+                loss = amount_per_share(symbol, entry.price - high)
             if low is not None:
-                profit = entry.price - low
+                profit = amount_per_share(symbol, entry.price - low)
         if loss < 0 and loss < entry.mae:
             entry.mae = loss
         if profit > 0 and profit > entry.mfe:
@@ -380,6 +382,7 @@ class Portfolio:
     def __init__(
         self,
         cash: float,
+        volume_multiples: dict[str, int] = {},
         fee_mode: Optional[
             Union[FeeMode, Callable[[FeeInfo], Decimal], None]
         ] = None,
@@ -393,6 +396,7 @@ class Portfolio:
     ):
         self.cash: Decimal = to_decimal(cash)
         self._initial_market_value = self.cash
+        self._volume_multiples = volume_multiples
         self._fee_mode = fee_mode
         self._fee_amount: Optional[Decimal] = (
             None if fee_amount is None else to_decimal(fee_amount)
@@ -597,13 +601,16 @@ class Portfolio:
             if stop.id in self._stop_data:
                 del self._stop_data[stop.id]
 
-    def _clamp_shares(self, fill_price: Decimal, shares: Decimal) -> Decimal:
+    def _amount_per_share(self, symbol: str, fill_price: Decimal) -> Decimal:
+        return fill_price * (1 if symbol not in self._volume_multiples else self._volume_multiples[symbol])
+
+    def _clamp_shares(self, symbol: str, fill_price: Decimal, shares: Decimal) -> Decimal:
         if self.cash < 0:
             return Decimal()
         max_shares = (
-            Decimal(self.cash / fill_price)
+            Decimal(self.cash / self._amount_per_share(symbol, fill_price))
             if self._enable_fractional_shares
-            else Decimal(self.cash // fill_price)
+            else Decimal(self.cash // self._amount_per_share(symbol, fill_price))
         )
         return min(shares, max_shares)
 
@@ -698,11 +705,11 @@ class Portfolio:
         fill_price: Decimal,
         stop_type: Optional[StopType],
     ):
-        order_amount = shares * fill_price
-        entry_amount = shares * entry.price
+        order_amount = shares * self._amount_per_share(pos.symbol, fill_price)
+        entry_amount = shares * self._amount_per_share(pos.symbol, entry.price)
         entry_pnl = entry_amount - order_amount
         self.pnl += entry_pnl
-        self.cash += entry_pnl
+        self.cash += order_amount
         pos.shares -= shares
         entry.shares -= shares
         pnl_per_bar = entry_pnl if not entry.bars else entry_pnl / entry.bars
@@ -739,7 +746,7 @@ class Portfolio:
     ) -> Decimal:
         if self._position_mode == PositionMode.SHORT_ONLY:
             return Decimal()
-        clamped_shares = self._clamp_shares(fill_price, shares)
+        clamped_shares = self._clamp_shares(symbol, fill_price, shares)
         if clamped_shares < shares:
             self._logger.debug_buy_shares_exceed_cash(
                 date=date,
@@ -759,7 +766,7 @@ class Portfolio:
             and len(self.long_positions) == self._max_long_positions
         ):
             return Decimal()
-        order_amount = shares * fill_price
+        order_amount = shares * self._amount_per_share(symbol, fill_price)
         self.cash -= order_amount
         if symbol not in self.long_positions:
             self.symbols.add(symbol)
@@ -869,8 +876,8 @@ class Portfolio:
         fill_price: Decimal,
         stop_type: Optional[StopType],
     ):
-        order_amount = shares * fill_price
-        entry_amount = shares * entry.price
+        order_amount = shares * self._amount_per_share(pos.symbol, fill_price)
+        entry_amount = shares * self._amount_per_share(pos.symbol, entry.price)
         entry_pnl = order_amount - entry_amount
         self.pnl += entry_pnl
         self.cash += order_amount
@@ -933,6 +940,19 @@ class Portfolio:
             return Decimal()
         if self._position_mode == PositionMode.LONG_ONLY:
             return Decimal()
+        clamped_shares = self._clamp_shares(symbol, fill_price, shares)
+        if clamped_shares < shares:
+            self._logger.debug_sell_shares_exceed_cash(
+                date=date,
+                symbol=symbol,
+                shares=shares,
+                fill_price=fill_price,
+                cash=self.cash,
+                clamped_shares=clamped_shares,
+            )
+            shares = clamped_shares
+        order_amount = shares * self._amount_per_share(symbol, fill_price)
+        self.cash -= order_amount
         if symbol not in self.short_positions:
             self.symbols.add(symbol)
             pos = Position(symbol=symbol, shares=shares, type="short")
@@ -1011,9 +1031,9 @@ class Portfolio:
                 pos = self.long_positions[sym]
                 if close is not None:
                     _calculate_pnl_mae_mfe(
-                        pos, close=close, low=low, high=high
+                        pos, close=close, low=low, high=high, amount_per_share=self._amount_per_share
                     )
-                    pos.equity = pos.shares * close
+                    pos.equity = pos.shares * self._amount_per_share(pos.symbol, close)
                     pos.market_value = pos.equity
                     pos.close = close
                     pos_long_shares += pos.shares
@@ -1026,10 +1046,10 @@ class Portfolio:
                 pos = self.short_positions[sym]
                 if close is not None:
                     _calculate_pnl_mae_mfe(
-                        pos, close=close, low=low, high=high
+                        pos, close=close, low=low, high=high, amount_per_share=self._amount_per_share
                     )
                     pos.close = close
-                    pos.margin = close * pos.shares
+                    pos.margin = self._amount_per_share(pos.symbol, close) * pos.shares
                     pos.market_value = pos.margin + pos.pnl
                     pos_margin += pos.margin
                     pos_short_shares += pos.shares

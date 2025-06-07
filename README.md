@@ -1,3 +1,11 @@
+## What's included in this fork?
+
+- Custom price rounding logic
+- `VolumeMultiple` support
+- Short positions also occupy cash
+
+## 
+
 <img src="https://github.com/edtechre/pybroker/blob/master/docs/_static/pybroker-logo.png?raw=true" alt="PyBroker">
 
 [![python](https://img.shields.io/badge/python-v3-brightgreen.svg)](https://www.python.org/)
